@@ -688,7 +688,7 @@ export function Dashboard({
 function ColumnDrop({ id, children }: { id: TaskStatus; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div ref={setNodeRef} className={cn("min-h-[520px] rounded-lg border bg-white p-3 shadow-sm transition-all duration-200 ease-out", isOver && "scale-[1.01] border-slate-950 bg-slate-50/60 shadow-lg ring-4 ring-slate-200")}>
+    <div ref={setNodeRef} className={cn("min-w-0 overflow-hidden rounded-lg border bg-white p-3 shadow-sm transition-all duration-200 ease-out", isOver && "scale-[1.01] border-slate-950 bg-slate-50/60 shadow-lg ring-4 ring-slate-200")}>
       {children}
     </div>
   );
@@ -781,9 +781,9 @@ function SelectField({
 function TaskCardShell({ task, childCount, overlay = false }: { task: Task; childCount: number; overlay?: boolean }) {
   const isSubtask = Boolean(task.parent_task_id);
   return (
-    <article className={cn("rounded-lg border bg-white p-3 shadow-sm", isSubtask && "border-slate-200 bg-slate-50/70", overlay && "w-[320px] rotate-[0.5deg] scale-[1.02] shadow-2xl ring-1 ring-slate-900/5")}>
+    <article className={cn("w-full max-w-full overflow-hidden rounded-lg border bg-white p-3 shadow-sm", isSubtask && "border-slate-200 bg-slate-50/70", overlay && "w-[320px] rotate-[0.5deg] scale-[1.02] shadow-2xl ring-1 ring-slate-900/5")}>
       {isSubtask ? (
-        <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <div className="mb-2 flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <CornerDownRight className="h-3.5 w-3.5" />
           <span className="truncate">Subtask of {task.parent_task_title || "parent task"}</span>
         </div>
@@ -853,14 +853,14 @@ function TaskCard({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition: transition || "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)" }}
       className={cn(
-        "rounded-lg border bg-white p-3 shadow-sm transition-[box-shadow,opacity,transform,background-color,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md",
+        "w-full max-w-full overflow-hidden rounded-lg border bg-white p-3 shadow-sm transition-[box-shadow,opacity,transform,background-color,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md",
         isSubtask && "border-slate-200 bg-slate-50/70",
         isDragging && "opacity-25 shadow-none"
       )}
     >
       {isSubtask ? (
-        <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <CornerDownRight className="h-3.5 w-3.5" />
+        <div className="mb-2 flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <CornerDownRight className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">Subtask of {task.parent_task_title || "parent task"}</span>
         </div>
       ) : null}
@@ -904,7 +904,7 @@ function TaskCard({
         <span>Starts {format(parseISO(task.start_date), "MMM d")}</span>
         {task.deadline ? <span>Deadline {format(parseISO(task.deadline), "MMM d, yyyy")}</span> : null}
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <SelectField
           label="Change priority"
           value={task.priority}

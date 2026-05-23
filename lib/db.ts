@@ -329,7 +329,44 @@ export async function updateTask(id: string, patch: Partial<{
     where id = ${id}
     returning id
   ` as unknown as Task[];
+  await syncParentCompletion(rows[0].id);
   return await getTask(rows[0].id);
+}
+
+async function syncParentCompletion(taskId: string) {
+  const parentRows = await sql`
+    select parent_task_id::text
+    from tasks
+    where id = ${taskId}
+  ` as unknown as { parent_task_id: string | null }[];
+  const parentId = parentRows[0]?.parent_task_id;
+  if (!parentId) return;
+
+  const summaryRows = await sql`
+    select
+      count(*)::int as total,
+      count(*) filter (where status = 'done')::int as done
+    from tasks
+    where parent_task_id = ${parentId}
+  ` as unknown as { total: number; done: number }[];
+  const summary = summaryRows[0];
+  if (summary?.total && summary.total === summary.done) {
+    await sql`
+      update tasks
+      set status = 'done',
+        completed_at = coalesce(completed_at, now()),
+        updated_at = now()
+      where id = ${parentId}
+    `;
+  } else {
+    await sql`
+      update tasks
+      set status = 'progress',
+        completed_at = null,
+        updated_at = now()
+      where id = ${parentId} and status = 'done'
+    `;
+  }
 }
 
 export async function getTask(id: string) {
