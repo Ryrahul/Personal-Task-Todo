@@ -33,13 +33,14 @@ import {
   LogOut,
   Mic,
   MicOff,
+  Pencil,
   Plus,
   Send,
   Sparkles,
   Trash2,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Project, Task, TaskPriority, TaskStatus } from "@/lib/db";
 import { cn } from "@/lib/utils";
 
@@ -77,10 +78,23 @@ type SpeechRecognitionConstructor = new () => SpeechRecognition;
 
 type SpeechRecognition = {
   lang: string;
+  continuous: boolean;
   interimResults: boolean;
-  onresult: ((event: { results: { [index: number]: { [index: number]: { transcript: string } } } }) => void) | null;
+  maxAlternatives: number;
+  onresult: ((event: {
+    resultIndex: number;
+    results: {
+      length: number;
+      [index: number]: {
+        isFinal: boolean;
+        [index: number]: { transcript: string; confidence?: number };
+      };
+    };
+  }) => void) | null;
   onend: (() => void) | null;
+  onerror: (() => void) | null;
   start: () => void;
+  stop: () => void;
 };
 
 declare global {
@@ -116,7 +130,20 @@ export function Dashboard({
     { role: "assistant", text: "Ask about today, a project, what is done, or tell me to add a task." }
   ]);
   const [listening, setListening] = useState(false);
+  const [voiceInterim, setVoiceInterim] = useState("");
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const voiceBaseRef = useRef("");
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editDraft, setEditDraft] = useState({
+    title: "",
+    description: "",
+    projectId: "",
+    priority: "medium" as TaskPriority,
+    status: "todo" as TaskStatus,
+    startDate: "",
+    deadline: ""
+  });
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const stats = useMemo(() => {
@@ -210,6 +237,39 @@ export function Dashboard({
     await loadDate(selectedDate);
   }
 
+  function openEditTask(task: Task) {
+    setEditingTask(task);
+    setEditDraft({
+      title: task.title,
+      description: task.description || "",
+      projectId: task.project_id || "",
+      priority: task.priority,
+      status: task.status,
+      startDate: task.start_date,
+      deadline: task.deadline || ""
+    });
+  }
+
+  async function submitEditTask(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editingTask) return;
+    await fetch(`/api/tasks/${editingTask.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: editDraft.title,
+        description: editDraft.description || null,
+        projectId: editDraft.projectId || null,
+        priority: editDraft.priority,
+        status: editDraft.status,
+        startDate: editDraft.startDate,
+        deadline: editDraft.deadline || null
+      })
+    });
+    setEditingTask(null);
+    await loadDate(selectedDate);
+  }
+
   async function removeTask(id: string) {
     setTasks((current) => current.filter((task) => task.id !== id));
     await fetch(`/api/tasks/${id}`, { method: "DELETE" });
@@ -295,13 +355,44 @@ export function Dashboard({
   }
 
   function startVoice() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      setListening(false);
+      setVoiceInterim("");
+      return;
+    }
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) return;
     const recognition = new Recognition();
     recognition.lang = "en-US";
-    recognition.interimResults = false;
-    recognition.onresult = (event) => setChat((current) => `${current} ${event.results[0][0].transcript}`.trim());
-    recognition.onend = () => setListening(false);
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
+    voiceBaseRef.current = chat.trim();
+    recognition.onresult = (event) => {
+      let finalText = "";
+      let interimText = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0].transcript.trim();
+        if (event.results[index].isFinal) finalText = `${finalText} ${transcript}`.trim();
+        else interimText = `${interimText} ${transcript}`.trim();
+      }
+      if (finalText) voiceBaseRef.current = `${voiceBaseRef.current} ${finalText}`.trim();
+      setVoiceInterim(interimText);
+      setChat(`${voiceBaseRef.current} ${interimText}`.trim());
+    };
+    recognition.onerror = () => {
+      setListening(false);
+      setVoiceInterim("");
+      recognitionRef.current = null;
+    };
+    recognition.onend = () => {
+      setListening(false);
+      setVoiceInterim("");
+      recognitionRef.current = null;
+    };
+    recognitionRef.current = recognition;
     setListening(true);
     recognition.start();
   }
@@ -468,6 +559,7 @@ export function Dashboard({
                             childCount={tasks.filter((child) => child.parent_task_id === task.id).length}
                             onUpdate={updateTaskLocal}
                             onDelete={removeTask}
+                            onEdit={openEditTask}
                             onCreateSubtask={createSubtask}
                           />
                         ))}
@@ -519,6 +611,7 @@ export function Dashboard({
             </div>
             <form onSubmit={sendChat} className="border-t bg-white p-3">
               <textarea value={chat} onChange={(event) => setChat(event.target.value)} placeholder="Ask what is due today, summarize a project, or add a task..." className={cn(fieldClass, "h-auto min-h-20 w-full resize-none py-2 leading-6")} />
+              {voiceInterim ? <p className="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-muted-foreground">Listening: {voiceInterim}</p> : null}
               <div className="mt-2 grid grid-cols-[40px_1fr] gap-2">
                 <Tooltip text={listening ? "Listening" : "Use voice input"}>
                   <button type="button" onClick={startVoice} className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200" aria-label="Voice input">
@@ -533,6 +626,59 @@ export function Dashboard({
               </div>
             </form>
           </section>
+        </div>
+      ) : null}
+
+      {editingTask ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/30 px-3 py-4 backdrop-blur-sm sm:items-center">
+          <form onSubmit={submitEditTask} className="w-full max-w-2xl overflow-hidden rounded-lg border bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold">Edit task</h2>
+                <p className="text-xs text-muted-foreground">{editingTask.parent_task_title ? `Subtask of ${editingTask.parent_task_title}` : "Update task details"}</p>
+              </div>
+              <Tooltip text="Close editor">
+                <button type="button" onClick={() => setEditingTask(null)} className="inline-flex h-8 w-8 items-center justify-center rounded-md transition hover:bg-slate-100 focus:outline-none focus:ring-4 focus:ring-slate-200" aria-label="Close editor">
+                  <X className="h-4 w-4" />
+                </button>
+              </Tooltip>
+            </div>
+            <div className="grid gap-3 p-4">
+              <input value={editDraft.title} onChange={(event) => setEditDraft((draft) => ({ ...draft, title: event.target.value }))} className={fieldClass} required />
+              <textarea value={editDraft.description} onChange={(event) => setEditDraft((draft) => ({ ...draft, description: event.target.value }))} placeholder="Notes, context, links..." className={cn(fieldClass, "h-auto min-h-24 w-full resize-y py-2 leading-6")} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SelectField
+                  label="Project"
+                  value={editDraft.projectId}
+                  placeholder="No project"
+                  options={[{ value: "", label: "No project", meta: "Keep it uncategorized" }, ...projects.map((project) => ({ value: project.id, label: project.name, meta: "Project", color: project.color }))]}
+                  onChange={(value) => setEditDraft((draft) => ({ ...draft, projectId: value }))}
+                />
+                <SelectField
+                  label="Priority"
+                  value={editDraft.priority}
+                  options={priorityOptions}
+                  onChange={(value) => setEditDraft((draft) => ({ ...draft, priority: value as TaskPriority }))}
+                />
+                <SelectField
+                  label="Status"
+                  value={editDraft.status}
+                  options={statusOptions}
+                  onChange={(value) => setEditDraft((draft) => ({ ...draft, status: value as TaskStatus }))}
+                />
+                <input type="date" value={editDraft.startDate} onChange={(event) => setEditDraft((draft) => ({ ...draft, startDate: event.target.value }))} className={fieldClass} aria-label="Start date" />
+                <input type="date" value={editDraft.deadline} onChange={(event) => setEditDraft((draft) => ({ ...draft, deadline: event.target.value }))} className={fieldClass} aria-label="Deadline" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t bg-slate-50 px-4 py-3">
+              <button type="button" onClick={() => setEditingTask(null)} className="inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">
+                Cancel
+              </button>
+              <button className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800">
+                Save changes
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
     </main>
@@ -679,12 +825,14 @@ function TaskCard({
   childCount,
   onUpdate,
   onDelete,
+  onEdit,
   onCreateSubtask
 }: {
   task: Task;
   childCount: number;
   onUpdate: (id: string, patch: Partial<Task> & { startDate?: string; sortOrder?: number }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onEdit: (task: Task) => void;
   onCreateSubtask: (parent: Task, title: string) => Promise<void>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
@@ -726,6 +874,11 @@ function TaskCard({
           <h3 className="break-words text-sm font-semibold leading-6">{task.title}</h3>
           {task.description ? <p className="mt-1 break-words text-sm leading-6 text-muted-foreground">{task.description}</p> : null}
         </div>
+        <Tooltip text="Edit task">
+          <button onClick={() => onEdit(task)} className="rounded-md p-1 text-muted-foreground transition hover:bg-slate-100 hover:text-foreground focus:outline-none focus:ring-4 focus:ring-slate-200" aria-label="Edit task">
+            <Pencil className="h-4 w-4" />
+          </button>
+        </Tooltip>
         <Tooltip text="Delete task">
           <button onClick={() => onDelete(task.id)} className="rounded-md p-1 text-muted-foreground transition hover:bg-red-50 hover:text-destructive focus:outline-none focus:ring-4 focus:ring-red-100" aria-label="Delete task">
             <Trash2 className="h-4 w-4" />
