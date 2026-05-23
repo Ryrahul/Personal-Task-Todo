@@ -3,7 +3,11 @@
 import {
   DndContext,
   DragEndEvent,
+  DragOverlay,
+  DragOverEvent,
+  DragStartEvent,
   PointerSensor,
+  closestCorners,
   useDroppable,
   useSensor,
   useSensors
@@ -47,7 +51,6 @@ const columns: { id: TaskStatus; label: string; icon: React.ElementType }[] = [
 
 const projectColors = ["#2563eb", "#0891b2", "#059669", "#7c3aed", "#dc2626", "#ea580c", "#4f46e5", "#475569"];
 
-const priorityRank: Record<TaskPriority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 const priorityClass: Record<TaskPriority, string> = {
   urgent: "border-red-200 bg-red-50 text-red-700",
   high: "border-amber-200 bg-amber-50 text-amber-800",
@@ -68,6 +71,7 @@ const statusOptions: { value: TaskStatus; label: string; meta: string }[] = [
   { value: "progress", label: "In progress", meta: "Currently moving" },
   { value: "done", label: "Done", meta: "Completed work" }
 ];
+const columnIds = columns.map((column) => column.id);
 
 type SpeechRecognitionConstructor = new () => SpeechRecognition;
 
@@ -112,6 +116,7 @@ export function Dashboard({
     { role: "assistant", text: "Ask about today, a project, what is done, or tell me to add a task." }
   ]);
   const [listening, setListening] = useState(false);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const stats = useMemo(() => {
@@ -123,6 +128,7 @@ export function Dashboard({
 
   const dateLabel = isToday(parseISO(selectedDate)) ? "Today" : format(parseISO(selectedDate), "EEE, MMM d");
   const visibleDays = days.length ? days : [initialDate];
+  const activeTask = activeTaskId ? tasks.find((task) => task.id === activeTaskId) : null;
 
   async function loadDate(date: string) {
     setSelectedDate(date);
@@ -210,34 +216,64 @@ export function Dashboard({
     await loadDate(selectedDate);
   }
 
-  async function onDragEnd(event: DragEndEvent) {
+  function moveTaskForDrag(currentTasks: Task[], activeId: string, overId: string) {
+    const activeTask = currentTasks.find((task) => task.id === activeId);
+    if (!activeTask) return currentTasks;
+
+    const overTask = currentTasks.find((task) => task.id === overId);
+    const targetStatus = columnIds.includes(overId as TaskStatus)
+      ? (overId as TaskStatus)
+      : overTask?.status || activeTask.status;
+    const activeIndex = currentTasks.findIndex((task) => task.id === activeId);
+
+    if (overTask && activeTask.status === targetStatus) {
+      const overIndex = currentTasks.findIndex((task) => task.id === overId);
+      if (activeIndex === overIndex) return currentTasks;
+      return arrayMove(currentTasks, activeIndex, overIndex);
+    }
+
+    const withoutActive = currentTasks.filter((task) => task.id !== activeId);
+    const movedTask = { ...activeTask, status: targetStatus };
+    if (overTask) {
+      const overIndex = withoutActive.findIndex((task) => task.id === overId);
+      return [...withoutActive.slice(0, overIndex), movedTask, ...withoutActive.slice(overIndex)];
+    }
+
+    const lastTargetIndex = withoutActive.map((task) => task.status).lastIndexOf(targetStatus);
+    if (lastTargetIndex === -1) return [...withoutActive, movedTask];
+    return [...withoutActive.slice(0, lastTargetIndex + 1), movedTask, ...withoutActive.slice(lastTargetIndex + 1)];
+  }
+
+  function onDragStart(event: DragStartEvent) {
+    setActiveTaskId(String(event.active.id));
+  }
+
+  function onDragOver(event: DragOverEvent) {
     const { active, over } = event;
     if (!over) return;
-    const activeTask = tasks.find((task) => task.id === active.id);
-    if (!activeTask) return;
+    setTasks((current) => moveTaskForDrag(current, String(active.id), String(over.id)));
+  }
 
-    const overId = String(over.id);
-    const newStatus = columns.some((column) => column.id === overId)
-      ? (overId as TaskStatus)
-      : tasks.find((task) => task.id === overId)?.status || activeTask.status;
+  async function onDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveTaskId(null);
+    if (!over) return;
 
-    let next = tasks.map((task) => (task.id === activeTask.id ? { ...task, status: newStatus } : task));
-    const oldIndex = next.findIndex((task) => task.id === active.id);
-    const newIndex = next.findIndex((task) => task.id === over.id);
-    if (newIndex >= 0) next = arrayMove(next, oldIndex, newIndex);
+    const next = moveTaskForDrag(tasks, String(active.id), String(over.id));
+    const movedTask = next.find((task) => task.id === active.id);
+    if (!movedTask) return;
     setTasks(next);
 
-    await fetch(`/api/tasks/${activeTask.id}`, {
+    await fetch(`/api/tasks/${movedTask.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus })
+      body: JSON.stringify({ status: movedTask.status })
     });
     await fetch("/api/tasks/reorder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids: next.map((task) => task.id) })
     });
-    await loadDate(selectedDate);
   }
 
   async function sendChat(event?: React.FormEvent) {
@@ -412,12 +448,10 @@ export function Dashboard({
             </div>
           </form>
 
-          <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+          <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => setActiveTaskId(null)}>
             <div className="task-grid grid gap-4">
               {columns.map((column) => {
-                const columnTasks = tasks
-                  .filter((task) => task.status === column.id)
-                  .sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority] || a.sort_order - b.sort_order);
+                const columnTasks = tasks.filter((task) => task.status === column.id);
                 const Icon = column.icon;
                 return (
                   <SortableContext key={column.id} id={column.id} items={columnTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
@@ -443,6 +477,15 @@ export function Dashboard({
                 );
               })}
             </div>
+            <DragOverlay adjustScale={false} dropAnimation={{ duration: 220, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }}>
+              {activeTask ? (
+                <TaskCardShell
+                  task={activeTask}
+                  childCount={tasks.filter((child) => child.parent_task_id === activeTask.id).length}
+                  overlay
+                />
+              ) : null}
+            </DragOverlay>
           </DndContext>
         </section>
       </div>
@@ -499,7 +542,7 @@ export function Dashboard({
 function ColumnDrop({ id, children }: { id: TaskStatus; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div ref={setNodeRef} className={cn("min-h-[520px] rounded-lg border bg-white p-3 shadow-sm transition", isOver && "border-slate-950 ring-4 ring-slate-200")}>
+    <div ref={setNodeRef} className={cn("min-h-[520px] rounded-lg border bg-white p-3 shadow-sm transition-all duration-200 ease-out", isOver && "scale-[1.01] border-slate-950 bg-slate-50/60 shadow-lg ring-4 ring-slate-200")}>
       {children}
     </div>
   );
@@ -589,6 +632,48 @@ function SelectField({
   );
 }
 
+function TaskCardShell({ task, childCount, overlay = false }: { task: Task; childCount: number; overlay?: boolean }) {
+  const isSubtask = Boolean(task.parent_task_id);
+  return (
+    <article className={cn("rounded-lg border bg-white p-3 shadow-sm", isSubtask && "border-slate-200 bg-slate-50/70", overlay && "w-[320px] rotate-[0.5deg] scale-[1.02] shadow-2xl ring-1 ring-slate-900/5")}>
+      {isSubtask ? (
+        <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <CornerDownRight className="h-3.5 w-3.5" />
+          <span className="truncate">Subtask of {task.parent_task_title || "parent task"}</span>
+        </div>
+      ) : null}
+      <div className="mb-3 flex items-start gap-2">
+        <div className="mt-0.5 rounded-md p-0.5 text-muted-foreground">
+          <GripVertical className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="break-words text-sm font-semibold leading-6">{task.title}</h3>
+          {task.description ? <p className="mt-1 break-words text-sm leading-6 text-muted-foreground">{task.description}</p> : null}
+        </div>
+      </div>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <span className={cn("rounded-md border px-2 py-1 text-xs font-semibold capitalize", priorityClass[task.priority])}>{task.priority}</span>
+        {childCount ? (
+          <span className="inline-flex items-center gap-1.5 rounded-md border bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700">
+            <CornerDownRight className="h-3 w-3" />
+            {childCount} subtask{childCount === 1 ? "" : "s"}
+          </span>
+        ) : null}
+        {task.project_name ? (
+          <span className="inline-flex items-center gap-1.5 rounded-md border bg-white px-2 py-1 text-xs font-medium text-slate-700">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: task.project_color || "#64748b" }} />
+            {task.project_name}
+          </span>
+        ) : null}
+      </div>
+      <div className="grid gap-1 text-xs text-muted-foreground">
+        <span>Starts {format(parseISO(task.start_date), "MMM d")}</span>
+        {task.deadline ? <span>Deadline {format(parseISO(task.deadline), "MMM d, yyyy")}</span> : null}
+      </div>
+    </article>
+  );
+}
+
 function TaskCard({
   task,
   childCount,
@@ -616,7 +701,15 @@ function TaskCard({
   }
 
   return (
-    <article ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn("rounded-lg border bg-white p-3 shadow-sm", isSubtask && "border-slate-200 bg-slate-50/70", isDragging && "opacity-70 shadow-lg")}>
+    <article
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition: transition || "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)" }}
+      className={cn(
+        "rounded-lg border bg-white p-3 shadow-sm transition-[box-shadow,opacity,transform,background-color,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md",
+        isSubtask && "border-slate-200 bg-slate-50/70",
+        isDragging && "opacity-25 shadow-none"
+      )}
+    >
       {isSubtask ? (
         <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <CornerDownRight className="h-3.5 w-3.5" />
