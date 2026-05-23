@@ -781,23 +781,23 @@ function SelectField({
 function TaskCardShell({ task, childCount, overlay = false }: { task: Task; childCount: number; overlay?: boolean }) {
   const isSubtask = Boolean(task.parent_task_id);
   return (
-    <article className={cn("w-full max-w-full overflow-hidden rounded-lg border bg-white p-3 shadow-sm", isSubtask && "border-slate-200 bg-slate-50/70", overlay && "w-[320px] rotate-[0.5deg] scale-[1.02] shadow-2xl ring-1 ring-slate-900/5")}>
+    <article className={cn("w-full max-w-full overflow-hidden rounded-lg border bg-white p-3 shadow-sm", isSubtask && "rounded-md border-slate-200 bg-slate-50/70 p-2.5 shadow-none", overlay && "w-[320px] rotate-[0.5deg] scale-[1.02] shadow-2xl ring-1 ring-slate-900/5")}>
       {isSubtask ? (
-        <div className="mb-2 flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <CornerDownRight className="h-3.5 w-3.5" />
+        <div className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+          <CornerDownRight className="h-3 w-3 shrink-0" />
           <span className="truncate">Subtask of {task.parent_task_title || "parent task"}</span>
         </div>
       ) : null}
-      <div className="mb-3 flex items-start gap-2">
+      <div className={cn("flex items-start gap-2", isSubtask ? "mb-2" : "mb-3")}>
         <div className="mt-0.5 rounded-md p-0.5 text-muted-foreground">
           <GripVertical className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="break-words text-sm font-semibold leading-6">{task.title}</h3>
-          {task.description ? <p className="mt-1 break-words text-sm leading-6 text-muted-foreground">{task.description}</p> : null}
+          <h3 className={cn("break-words font-semibold", isSubtask ? "text-[13px] leading-5" : "text-sm leading-6")}>{task.title}</h3>
+          {task.description ? <p className={cn("mt-1 break-words text-muted-foreground", isSubtask ? "text-xs leading-5" : "text-sm leading-6")}>{task.description}</p> : null}
         </div>
       </div>
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className={cn("flex flex-wrap gap-2", isSubtask ? "mb-2" : "mb-3")}>
         <span className={cn("rounded-md border px-2 py-1 text-xs font-semibold capitalize", priorityClass[task.priority])}>{task.priority}</span>
         {childCount ? (
           <span className="inline-flex items-center gap-1.5 rounded-md border bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700">
@@ -812,7 +812,7 @@ function TaskCardShell({ task, childCount, overlay = false }: { task: Task; chil
           </span>
         ) : null}
       </div>
-      <div className="grid gap-1 text-xs text-muted-foreground">
+      <div className={cn("grid gap-1 text-muted-foreground", isSubtask ? "text-[11px]" : "text-xs")}>
         <span>Starts {format(parseISO(task.start_date), "MMM d")}</span>
         {task.deadline ? <span>Deadline {format(parseISO(task.deadline), "MMM d, yyyy")}</span> : null}
       </div>
@@ -854,25 +854,25 @@ function TaskCard({
       style={{ transform: CSS.Transform.toString(transform), transition: transition || "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)" }}
       className={cn(
         "w-full max-w-full overflow-hidden rounded-lg border bg-white p-3 shadow-sm transition-[box-shadow,opacity,transform,background-color,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md",
-        isSubtask && "border-slate-200 bg-slate-50/70",
+        isSubtask && "rounded-md border-slate-200 bg-slate-50/70 p-2.5 shadow-none hover:shadow-sm",
         isDragging && "opacity-25 shadow-none"
       )}
     >
       {isSubtask ? (
-        <div className="mb-2 flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <CornerDownRight className="h-3.5 w-3.5 shrink-0" />
+        <div className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+          <CornerDownRight className="h-3 w-3 shrink-0" />
           <span className="truncate">Subtask of {task.parent_task_title || "parent task"}</span>
         </div>
       ) : null}
-      <div className="mb-3 flex items-start gap-2">
+      <div className={cn("flex items-start gap-2", isSubtask ? "mb-2" : "mb-3")}>
         <Tooltip text="Drag to reorder">
           <button className="mt-0.5 rounded-md p-0.5 text-muted-foreground transition hover:bg-slate-100 hover:text-foreground focus:outline-none focus:ring-4 focus:ring-slate-200" {...attributes} {...listeners} aria-label="Drag task">
             <GripVertical className="h-4 w-4" />
           </button>
         </Tooltip>
         <div className="min-w-0 flex-1">
-          <h3 className="break-words text-sm font-semibold leading-6">{task.title}</h3>
-          {task.description ? <p className="mt-1 break-words text-sm leading-6 text-muted-foreground">{task.description}</p> : null}
+          <h3 className={cn("break-words font-semibold", isSubtask ? "text-[13px] leading-5" : "text-sm leading-6")}>{task.title}</h3>
+          {task.description ? <p className={cn("mt-1 break-words text-muted-foreground", isSubtask ? "text-xs leading-5" : "text-sm leading-6")}>{task.description}</p> : null}
         </div>
         <Tooltip text="Edit task">
           <button onClick={() => onEdit(task)} className="rounded-md p-1 text-muted-foreground transition hover:bg-slate-100 hover:text-foreground focus:outline-none focus:ring-4 focus:ring-slate-200" aria-label="Edit task">
@@ -885,7 +885,7 @@ function TaskCard({
           </button>
         </Tooltip>
       </div>
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className={cn("flex flex-wrap gap-2", isSubtask ? "mb-2" : "mb-3")}>
         <span className={cn("rounded-md border px-2 py-1 text-xs font-semibold capitalize", priorityClass[task.priority])}>{task.priority}</span>
         {childCount ? (
           <span className="inline-flex items-center gap-1.5 rounded-md border bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700">
@@ -900,11 +900,11 @@ function TaskCard({
           </span>
         ) : null}
       </div>
-      <div className="grid gap-1 text-xs text-muted-foreground">
+      <div className={cn("grid gap-1 text-muted-foreground", isSubtask ? "text-[11px]" : "text-xs")}>
         <span>Starts {format(parseISO(task.start_date), "MMM d")}</span>
         {task.deadline ? <span>Deadline {format(parseISO(task.deadline), "MMM d, yyyy")}</span> : null}
       </div>
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", isSubtask ? "mt-2" : "mt-3")}>
         <SelectField
           label="Change priority"
           value={task.priority}
