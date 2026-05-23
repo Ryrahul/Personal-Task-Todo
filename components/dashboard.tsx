@@ -197,7 +197,7 @@ export function Dashboard({
         projectId: projectId || null,
         priority,
         startDate: form.get("startDate") || selectedDate,
-        deadline: form.get("deadline") || null,
+        deadline: form.get("deadline") || undefined,
         description: form.get("description") || null
       })
     });
@@ -220,7 +220,7 @@ export function Dashboard({
         priority: parent.priority,
         status: parent.status,
         startDate: parent.start_date,
-        deadline: parent.deadline,
+        deadline: parent.deadline || parent.start_date,
         description: null
       })
     });

@@ -260,6 +260,8 @@ export async function createTask(input: {
 }) {
   await ensureSchema();
   const project = await resolveProject(input);
+  const startDate = input.startDate || todayDate();
+  const deadline = input.deadline || startDate;
   if (input.parentTaskId) {
     const parent = await getTask(input.parentTaskId);
     if (!parent) throw new Error("Parent task does not exist");
@@ -273,8 +275,8 @@ export async function createTask(input: {
       ${project?.id || null},
       ${input.priority || "medium"},
       ${input.status || "todo"},
-      ${input.startDate || todayDate()}::date,
-      ${input.deadline || null}::date,
+      ${startDate}::date,
+      ${deadline}::date,
       extract(epoch from now())::integer
     )
     returning id
