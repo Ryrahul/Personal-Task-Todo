@@ -129,7 +129,12 @@ export async function listTasks(date: string) {
     from tasks
     left join projects on projects.id = tasks.project_id
     left join tasks parent_tasks on parent_tasks.id = tasks.parent_task_id
-    where tasks.start_date <= ${date}::date and (tasks.deadline is null or tasks.deadline >= ${date}::date)
+    where tasks.start_date <= ${date}::date
+      and (
+        tasks.deadline is null
+        or tasks.deadline >= ${date}::date
+        or tasks.status <> 'done'
+      )
     order by
       case tasks.priority when 'urgent' then 0 when 'high' then 1 when 'medium' then 2 else 3 end,
       tasks.sort_order asc,

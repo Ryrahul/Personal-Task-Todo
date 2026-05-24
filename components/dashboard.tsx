@@ -156,6 +156,8 @@ export function Dashboard({
   const dateLabel = isToday(parseISO(selectedDate)) ? "Today" : format(parseISO(selectedDate), "EEE, MMM d");
   const visibleDays = days.length ? days : [initialDate];
   const activeTask = activeTaskId ? tasks.find((task) => task.id === activeTaskId) : null;
+  const pinnedDayDates = [0, 1, 2, 3, -1, -2, -3, -4, -5, -6].map((offset) => addDays(parseISO(initialDate), offset).toISOString().slice(0, 10));
+  const pinnedDaySet = new Set(pinnedDayDates);
 
   async function loadDate(date: string) {
     setSelectedDate(date);
@@ -439,15 +441,15 @@ export function Dashboard({
               Days
             </div>
             <div className="grid gap-1">
-              {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
-                const date = addDays(parseISO(initialDate), -offset).toISOString().slice(0, 10);
+              {pinnedDayDates.map((date) => {
+                const offset = Math.round((parseISO(date).getTime() - parseISO(initialDate).getTime()) / 86_400_000);
                 return (
                   <button key={date} onClick={() => loadDate(date)} className={cn("rounded-md px-3 py-2 text-left text-sm hover:bg-slate-100", selectedDate === date && "bg-slate-950 text-white hover:bg-slate-950")}>
-                    {offset === 0 ? "Today" : format(parseISO(date), "MMM d, yyyy")}
+                    {offset === 0 ? "Today" : offset === 1 ? "Tomorrow" : format(parseISO(date), "MMM d, yyyy")}
                   </button>
                 );
               })}
-              {visibleDays.filter((day) => day < initialDate).slice(0, 10).map((day) => (
+              {visibleDays.filter((day) => !pinnedDaySet.has(day)).slice(0, 10).map((day) => (
                 <button key={day} onClick={() => loadDate(day)} className={cn("rounded-md px-3 py-2 text-left text-sm hover:bg-slate-100", selectedDate === day && "bg-slate-950 text-white hover:bg-slate-950")}>
                   {format(parseISO(day), "MMM d, yyyy")}
                 </button>
