@@ -119,6 +119,7 @@ export function Dashboard({
   const [tasks, setTasks] = useState(initialTasks);
   const [days, setDays] = useState(initialDays);
   const [projects, setProjects] = useState(initialProjects);
+  const [projectFilter, setProjectFilter] = useState("all");
   const [projectId, setProjectId] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [newProjectName, setNewProjectName] = useState("");
@@ -146,12 +147,18 @@ export function Dashboard({
   });
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
+  const visibleTasks = useMemo(() => {
+    if (projectFilter === "all") return tasks;
+    if (projectFilter === "none") return tasks.filter((task) => !task.project_id);
+    return tasks.filter((task) => task.project_id === projectFilter);
+  }, [projectFilter, tasks]);
+
   const stats = useMemo(() => {
-    const total = tasks.length;
-    const done = tasks.filter((task) => task.status === "done").length;
-    const progress = tasks.filter((task) => task.status === "progress").length;
+    const total = visibleTasks.length;
+    const done = visibleTasks.filter((task) => task.status === "done").length;
+    const progress = visibleTasks.filter((task) => task.status === "progress").length;
     return { total, done, progress, percent: total ? Math.round((done / total) * 100) : 0 };
-  }, [tasks]);
+  }, [visibleTasks]);
 
   const dateLabel = isToday(parseISO(selectedDate)) ? "Today" : format(parseISO(selectedDate), "EEE, MMM d");
   const visibleDays = days.length ? days : [initialDate];
@@ -185,6 +192,7 @@ export function Dashboard({
     const data = await response.json();
     const nextProjects = await refreshProjects();
     setProjectId(data.project?.id || nextProjects.find((project) => project.name === newProjectName.trim())?.id || "");
+    setProjectFilter(data.project?.id || "all");
     setNewProjectName("");
   }
 
@@ -463,11 +471,27 @@ export function Dashboard({
               Projects
             </div>
             <div className="grid gap-2">
-              {projects.length ? projects.slice(0, 8).map((project) => (
-                <div key={project.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: project.color }} />
-                  <span className="truncate">{project.name}</span>
-                </div>
+              <button onClick={() => setProjectFilter("all")} className={cn("flex items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-slate-100", projectFilter === "all" && "bg-slate-950 text-white hover:bg-slate-950")}>
+                <span>All projects</span>
+                <span className={cn("rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600", projectFilter === "all" && "bg-white/15 text-white")}>{tasks.length}</span>
+              </button>
+              {tasks.some((task) => !task.project_id) ? (
+                <button onClick={() => setProjectFilter("none")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-slate-100", projectFilter === "none" && "bg-slate-950 text-white hover:bg-slate-950")}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
+                    <span className="truncate">No project</span>
+                  </span>
+                  <span className={cn("rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600", projectFilter === "none" && "bg-white/15 text-white")}>{tasks.filter((task) => !task.project_id).length}</span>
+                </button>
+              ) : null}
+              {projects.length ? projects.slice(0, 10).map((project) => (
+                <button key={project.id} onClick={() => setProjectFilter(project.id)} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-slate-100", projectFilter === project.id && "bg-slate-950 text-white hover:bg-slate-950")}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: project.color }} />
+                    <span className="truncate">{project.name}</span>
+                  </span>
+                  <span className={cn("rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600", projectFilter === project.id && "bg-white/15 text-white")}>{tasks.filter((task) => task.project_id === project.id).length}</span>
+                </button>
               )) : <p className="px-2 py-2 text-sm text-muted-foreground">Create a project with your first task.</p>}
             </div>
           </section>
@@ -544,7 +568,7 @@ export function Dashboard({
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => setActiveTaskId(null)}>
             <div className="task-grid grid gap-4">
               {columns.map((column) => {
-                const columnTasks = tasks.filter((task) => task.status === column.id);
+                const columnTasks = visibleTasks.filter((task) => task.status === column.id);
                 const Icon = column.icon;
                 return (
                   <SortableContext key={column.id} id={column.id} items={columnTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
