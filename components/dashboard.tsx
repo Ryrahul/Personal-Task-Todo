@@ -122,6 +122,7 @@ export function Dashboard({
   const [projectFilter, setProjectFilter] = useState("all");
   const [projectId, setProjectId] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("medium");
+  const [taskDetailsOpen, setTaskDetailsOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectColor, setNewProjectColor] = useState(projectColors[0]);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -235,16 +236,6 @@ export function Dashboard({
       })
     });
     if (response.ok) await loadDate(selectedDate);
-  }
-
-  async function updateTaskLocal(id: string, patch: Partial<Task> & { startDate?: string; sortOrder?: number }) {
-    setTasks((current) => current.map((task) => (task.id === id ? ({ ...task, ...patch } as Task) : task)));
-    await fetch(`/api/tasks/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch)
-    });
-    await loadDate(selectedDate);
   }
 
   function openEditTask(task: Task) {
@@ -513,8 +504,8 @@ export function Dashboard({
         </aside>
 
         <section className="min-w-0 space-y-5">
-          <form key={selectedDate} onSubmit={createFromForm} className="rounded-lg border bg-white p-4 shadow-sm">
-            <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.2fr)_minmax(180px,0.75fr)_132px_150px_150px_96px]">
+          <form key={selectedDate} onSubmit={createFromForm} className="rounded-lg border bg-white p-3 shadow-sm">
+            <div className="grid gap-2 lg:grid-cols-[minmax(220px,1.2fr)_minmax(160px,0.65fr)_124px_148px_148px_92px_92px]">
               <input name="title" placeholder="Add a task..." className={fieldClass} required />
               <SelectField
                 label="Project"
@@ -536,33 +527,42 @@ export function Dashboard({
                   <Plus className="h-4 w-4" /> Add
                 </button>
               </Tooltip>
-            </div>
-
-            <textarea name="description" placeholder="Notes, context, links..." className={cn(fieldClass, "mt-3 h-auto min-h-16 w-full resize-y py-2 leading-6")} />
-
-            <div className="mt-3 flex flex-col gap-2 border-t pt-3 md:flex-row md:items-center">
-              <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
-                <input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" className={cn(smallFieldClass, "flex-1")} />
-                <div className="flex h-9 items-center gap-1 rounded-md border bg-white px-2">
-                  {projectColors.map((color) => (
-                    <Tooltip key={color} text={color}>
-                      <button
-                        type="button"
-                        onClick={() => setNewProjectColor(color)}
-                        className={cn("h-5 w-5 rounded-full border border-white ring-1 ring-slate-200 transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-slate-950", newProjectColor === color && "ring-2 ring-slate-950")}
-                        style={{ backgroundColor: color }}
-                        aria-label={`Use project color ${color}`}
-                      />
-                    </Tooltip>
-                  ))}
-                </div>
-              </div>
-              <Tooltip text="Create and select this project">
-                <button type="button" onClick={createProjectInline} className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">
-                  <Plus className="h-4 w-4" /> Create project
+              <Tooltip text={taskDetailsOpen ? "Hide task details" : "Show task details"}>
+                <button type="button" onClick={() => setTaskDetailsOpen((open) => !open)} className="inline-flex h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">
+                  {taskDetailsOpen ? "Less" : "Details"}
                 </button>
               </Tooltip>
             </div>
+
+            {taskDetailsOpen ? (
+              <>
+                <textarea name="description" placeholder="Notes, context, links..." className={cn(fieldClass, "mt-3 h-auto min-h-14 w-full resize-y py-2 leading-6")} />
+
+                <div className="mt-3 flex flex-col gap-2 border-t pt-3 md:flex-row md:items-center">
+                  <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
+                    <input value={newProjectName} onChange={(event) => setNewProjectName(event.target.value)} placeholder="New project" className={cn(smallFieldClass, "flex-1")} />
+                    <div className="flex h-9 items-center gap-1 rounded-md border bg-white px-2">
+                      {projectColors.map((color) => (
+                        <Tooltip key={color} text={color}>
+                          <button
+                            type="button"
+                            onClick={() => setNewProjectColor(color)}
+                            className={cn("h-5 w-5 rounded-full border border-white ring-1 ring-slate-200 transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-slate-950", newProjectColor === color && "ring-2 ring-slate-950")}
+                            style={{ backgroundColor: color }}
+                            aria-label={`Use project color ${color}`}
+                          />
+                        </Tooltip>
+                      ))}
+                    </div>
+                  </div>
+                  <Tooltip text="Create and select this project">
+                    <button type="button" onClick={createProjectInline} className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">
+                      <Plus className="h-4 w-4" /> Create project
+                    </button>
+                  </Tooltip>
+                </div>
+              </>
+            ) : null}
           </form>
 
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => setActiveTaskId(null)}>
@@ -583,7 +583,6 @@ export function Dashboard({
                             key={task.id}
                             task={task}
                             childCount={tasks.filter((child) => child.parent_task_id === task.id).length}
-                            onUpdate={updateTaskLocal}
                             onDelete={removeTask}
                             onEdit={openEditTask}
                             onCreateSubtask={createSubtask}
@@ -714,7 +713,7 @@ export function Dashboard({
 function ColumnDrop({ id, children }: { id: TaskStatus; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div ref={setNodeRef} className={cn("min-w-0 overflow-hidden rounded-lg border bg-white p-3 shadow-sm transition-all duration-200 ease-out", isOver && "scale-[1.01] border-slate-950 bg-slate-50/60 shadow-lg ring-4 ring-slate-200")}>
+    <div ref={setNodeRef} className={cn("min-w-0 overflow-hidden rounded-lg border bg-white p-2.5 shadow-sm transition-all duration-200 ease-out", isOver && "scale-[1.01] border-slate-950 bg-slate-50/60 shadow-lg ring-4 ring-slate-200")}>
       {children}
     </div>
   );
@@ -807,40 +806,40 @@ function SelectField({
 function TaskCardShell({ task, childCount, overlay = false }: { task: Task; childCount: number; overlay?: boolean }) {
   const isSubtask = Boolean(task.parent_task_id);
   return (
-    <article className={cn("w-full max-w-full overflow-hidden rounded-lg border bg-white p-3 shadow-sm", isSubtask && "rounded-md border-slate-200 bg-slate-50/70 p-2.5 shadow-none", overlay && "w-[320px] rotate-[0.5deg] scale-[1.02] shadow-2xl ring-1 ring-slate-900/5")}>
+    <article className={cn("w-full max-w-full overflow-hidden rounded-md border bg-white p-2.5 shadow-sm", isSubtask && "border-slate-200 bg-slate-50/70 p-2 shadow-none", overlay && "w-[320px] rotate-[0.5deg] scale-[1.02] shadow-2xl ring-1 ring-slate-900/5")}>
       {isSubtask ? (
-        <div className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+        <div className="mb-1 flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
           <CornerDownRight className="h-3 w-3 shrink-0" />
           <span className="truncate">Subtask of {task.parent_task_title || "parent task"}</span>
         </div>
       ) : null}
-      <div className={cn("flex items-start gap-2", isSubtask ? "mb-2" : "mb-3")}>
-        <div className="mt-0.5 rounded-md p-0.5 text-muted-foreground">
-          <GripVertical className="h-4 w-4" />
+      <div className="flex items-start gap-2">
+        <div className="rounded-md p-0.5 text-muted-foreground">
+          <GripVertical className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className={cn("break-words font-semibold", isSubtask ? "text-[13px] leading-5" : "text-sm leading-6")}>{task.title}</h3>
-          {task.description ? <p className={cn("mt-1 break-words text-muted-foreground", isSubtask ? "text-xs leading-5" : "text-sm leading-6")}>{task.description}</p> : null}
+          <h3 className={cn("task-title break-words font-semibold", isSubtask ? "text-[12px] leading-4" : "text-[13px] leading-5")}>{task.title}</h3>
+          {task.description ? <p className={cn("task-description mt-1 break-words text-muted-foreground", isSubtask ? "text-[11px] leading-4" : "text-xs leading-5")}>{task.description}</p> : null}
         </div>
       </div>
-      <div className={cn("flex flex-wrap gap-2", isSubtask ? "mb-2" : "mb-3")}>
-        <span className={cn("rounded-md border px-2 py-1 text-xs font-semibold capitalize", priorityClass[task.priority])}>{task.priority}</span>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <span className={cn("rounded border px-1.5 py-0.5 text-[11px] font-semibold capitalize leading-4", priorityClass[task.priority])}>{task.priority}</span>
         {childCount ? (
-          <span className="inline-flex items-center gap-1.5 rounded-md border bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700">
+          <span className="inline-flex items-center gap-1 rounded border bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-slate-700">
             <CornerDownRight className="h-3 w-3" />
             {childCount} subtask{childCount === 1 ? "" : "s"}
           </span>
         ) : null}
         {task.project_name ? (
-          <span className="inline-flex items-center gap-1.5 rounded-md border bg-white px-2 py-1 text-xs font-medium text-slate-700">
+          <span className="inline-flex min-w-0 items-center gap-1 rounded border bg-white px-1.5 py-0.5 text-[11px] font-medium leading-4 text-slate-700">
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: task.project_color || "#64748b" }} />
-            {task.project_name}
+            <span className="truncate">{task.project_name}</span>
           </span>
         ) : null}
       </div>
-      <div className={cn("grid gap-1 text-muted-foreground", isSubtask ? "text-[11px]" : "text-xs")}>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
         <span>Starts {format(parseISO(task.start_date), "MMM d")}</span>
-        {task.deadline ? <span>Deadline {format(parseISO(task.deadline), "MMM d, yyyy")}</span> : null}
+        {task.deadline ? <span>Due {format(parseISO(task.deadline), "MMM d")}</span> : null}
       </div>
     </article>
   );
@@ -849,14 +848,12 @@ function TaskCardShell({ task, childCount, overlay = false }: { task: Task; chil
 function TaskCard({
   task,
   childCount,
-  onUpdate,
   onDelete,
   onEdit,
   onCreateSubtask
 }: {
   task: Task;
   childCount: number;
-  onUpdate: (id: string, patch: Partial<Task> & { startDate?: string; sortOrder?: number }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onEdit: (task: Task) => void;
   onCreateSubtask: (parent: Task, title: string) => Promise<void>;
@@ -879,75 +876,59 @@ function TaskCard({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition: transition || "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)" }}
       className={cn(
-        "w-full max-w-full overflow-hidden rounded-lg border bg-white p-3 shadow-sm transition-[box-shadow,opacity,transform,background-color,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md",
-        isSubtask && "rounded-md border-slate-200 bg-slate-50/70 p-2.5 shadow-none hover:shadow-sm",
+        "w-full max-w-full overflow-hidden rounded-md border bg-white p-2.5 shadow-sm transition-[box-shadow,opacity,transform,background-color,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md",
+        isSubtask && "border-slate-200 bg-slate-50/70 p-2 shadow-none hover:shadow-sm",
         isDragging && "opacity-25 shadow-none"
       )}
     >
       {isSubtask ? (
-        <div className="mb-1.5 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+        <div className="mb-1 flex min-w-0 items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
           <CornerDownRight className="h-3 w-3 shrink-0" />
           <span className="truncate">Subtask of {task.parent_task_title || "parent task"}</span>
         </div>
       ) : null}
-      <div className={cn("flex items-start gap-2", isSubtask ? "mb-2" : "mb-3")}>
+      <div className="flex items-start gap-2">
         <Tooltip text="Drag to reorder">
-          <button className="mt-0.5 rounded-md p-0.5 text-muted-foreground transition hover:bg-slate-100 hover:text-foreground focus:outline-none focus:ring-4 focus:ring-slate-200" {...attributes} {...listeners} aria-label="Drag task">
-            <GripVertical className="h-4 w-4" />
+          <button className="rounded-md p-0.5 text-muted-foreground transition hover:bg-slate-100 hover:text-foreground focus:outline-none focus:ring-4 focus:ring-slate-200" {...attributes} {...listeners} aria-label="Drag task">
+            <GripVertical className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
         <div className="min-w-0 flex-1">
-          <h3 className={cn("break-words font-semibold", isSubtask ? "text-[13px] leading-5" : "text-sm leading-6")}>{task.title}</h3>
-          {task.description ? <p className={cn("mt-1 break-words text-muted-foreground", isSubtask ? "text-xs leading-5" : "text-sm leading-6")}>{task.description}</p> : null}
+          <h3 className={cn("task-title break-words font-semibold", isSubtask ? "text-[12px] leading-4" : "text-[13px] leading-5")}>{task.title}</h3>
+          {task.description ? <p className={cn("task-description mt-1 break-words text-muted-foreground", isSubtask ? "text-[11px] leading-4" : "text-xs leading-5")}>{task.description}</p> : null}
         </div>
         <Tooltip text="Edit task">
-          <button onClick={() => onEdit(task)} className="rounded-md p-1 text-muted-foreground transition hover:bg-slate-100 hover:text-foreground focus:outline-none focus:ring-4 focus:ring-slate-200" aria-label="Edit task">
-            <Pencil className="h-4 w-4" />
+          <button onClick={() => onEdit(task)} className="rounded-md p-0.5 text-muted-foreground transition hover:bg-slate-100 hover:text-foreground focus:outline-none focus:ring-4 focus:ring-slate-200" aria-label="Edit task">
+            <Pencil className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
         <Tooltip text="Delete task">
-          <button onClick={() => onDelete(task.id)} className="rounded-md p-1 text-muted-foreground transition hover:bg-red-50 hover:text-destructive focus:outline-none focus:ring-4 focus:ring-red-100" aria-label="Delete task">
-            <Trash2 className="h-4 w-4" />
+          <button onClick={() => onDelete(task.id)} className="rounded-md p-0.5 text-muted-foreground transition hover:bg-red-50 hover:text-destructive focus:outline-none focus:ring-4 focus:ring-red-100" aria-label="Delete task">
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
       </div>
-      <div className={cn("flex flex-wrap gap-2", isSubtask ? "mb-2" : "mb-3")}>
-        <span className={cn("rounded-md border px-2 py-1 text-xs font-semibold capitalize", priorityClass[task.priority])}>{task.priority}</span>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <span className={cn("rounded border px-1.5 py-0.5 text-[11px] font-semibold capitalize leading-4", priorityClass[task.priority])}>{task.priority}</span>
         {childCount ? (
-          <span className="inline-flex items-center gap-1.5 rounded-md border bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700">
+          <span className="inline-flex items-center gap-1 rounded border bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-slate-700">
             <CornerDownRight className="h-3 w-3" />
             {childCount} subtask{childCount === 1 ? "" : "s"}
           </span>
         ) : null}
         {task.project_name ? (
-          <span className="inline-flex items-center gap-1.5 rounded-md border bg-white px-2 py-1 text-xs font-medium text-slate-700">
+          <span className="inline-flex min-w-0 items-center gap-1 rounded border bg-white px-1.5 py-0.5 text-[11px] font-medium leading-4 text-slate-700">
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: task.project_color || "#64748b" }} />
-            {task.project_name}
+            <span className="truncate">{task.project_name}</span>
           </span>
         ) : null}
       </div>
-      <div className={cn("grid gap-1 text-muted-foreground", isSubtask ? "text-[11px]" : "text-xs")}>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
         <span>Starts {format(parseISO(task.start_date), "MMM d")}</span>
-        {task.deadline ? <span>Deadline {format(parseISO(task.deadline), "MMM d, yyyy")}</span> : null}
-      </div>
-      <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", isSubtask ? "mt-2" : "mt-3")}>
-        <SelectField
-          label="Change priority"
-          value={task.priority}
-          options={priorityOptions}
-          compact
-          onChange={(value) => onUpdate(task.id, { priority: value as TaskPriority })}
-        />
-        <SelectField
-          label="Change status"
-          value={task.status}
-          options={statusOptions}
-          compact
-          onChange={(value) => onUpdate(task.id, { status: value as TaskStatus })}
-        />
+        {task.deadline ? <span>Due {format(parseISO(task.deadline), "MMM d")}</span> : null}
       </div>
       {!isSubtask ? (
-        <div className="mt-3 border-t pt-3">
+        <div className="mt-2 border-t pt-2">
           {subtaskOpen ? (
             <form onSubmit={submitSubtask} className="grid gap-2">
               <input
@@ -968,7 +949,7 @@ function TaskCard({
             </form>
           ) : (
             <Tooltip text="Add a child task under this task">
-              <button type="button" onClick={() => setSubtaskOpen(true)} className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-2 text-xs font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">
+              <button type="button" onClick={() => setSubtaskOpen(true)} className="inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-2 text-[11px] font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">
                 <Plus className="h-3.5 w-3.5" />
                 Subtask
               </button>

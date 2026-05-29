@@ -51,6 +51,21 @@ textarea {
   min-width: 0;
 }
 
+.task-title,
+.task-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-title {
+  -webkit-line-clamp: 2;
+}
+
+.task-description {
+  -webkit-line-clamp: 2;
+}
+
 @media (max-width: 1100px) {
   .task-grid {
     grid-template-columns: 1fr;
